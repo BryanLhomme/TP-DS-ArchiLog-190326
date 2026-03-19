@@ -7,6 +7,7 @@ import com.archilog.reservationservice.event.ReservationEvent;
 import com.archilog.reservationservice.exception.BusinessException;
 import com.archilog.reservationservice.exception.ResourceNotFoundException;
 import com.archilog.reservationservice.kafka.ReservationEventProducer;
+import com.archilog.reservationservice.pattern.state.ReservationContext;
 import com.archilog.reservationservice.model.Reservation;
 import com.archilog.reservationservice.model.ReservationStatus;
 import com.archilog.reservationservice.repository.ReservationRepository;
@@ -103,11 +104,10 @@ public class ReservationService {
     public Reservation cancelReservation(Long id) {
         Reservation reservation = getReservationById(id);
 
-        if (reservation.getStatus() != ReservationStatus.CONFIRMED) {
-            throw new BusinessException("Seule une réservation CONFIRMED peut être annulée");
-        }
+        // State Pattern : délègue la transition au state courant
+        ReservationContext context = new ReservationContext(reservation);
+        context.cancel();
 
-        reservation.setStatus(ReservationStatus.CANCELLED);
         Reservation saved = reservationRepository.save(reservation);
 
         // Rendre la salle disponible si plus aucune réservation CONFIRMED sur cette salle
@@ -133,11 +133,10 @@ public class ReservationService {
     public Reservation completeReservation(Long id) {
         Reservation reservation = getReservationById(id);
 
-        if (reservation.getStatus() != ReservationStatus.CONFIRMED) {
-            throw new BusinessException("Seule une réservation CONFIRMED peut être complétée");
-        }
+        // State Pattern : délègue la transition au state courant
+        ReservationContext context = new ReservationContext(reservation);
+        context.complete();
 
-        reservation.setStatus(ReservationStatus.COMPLETED);
         Reservation saved = reservationRepository.save(reservation);
 
         // Rendre la salle disponible si plus aucune réservation CONFIRMED sur cette salle
