@@ -3,8 +3,10 @@ package com.archilog.reservationservice.service;
 import com.archilog.reservationservice.client.MemberClient;
 import com.archilog.reservationservice.client.RoomClient;
 import com.archilog.reservationservice.dto.CreateReservationDTO;
+import com.archilog.reservationservice.event.ReservationEvent;
 import com.archilog.reservationservice.exception.BusinessException;
 import com.archilog.reservationservice.exception.ResourceNotFoundException;
+import com.archilog.reservationservice.kafka.ReservationEventProducer;
 import com.archilog.reservationservice.model.Reservation;
 import com.archilog.reservationservice.model.ReservationStatus;
 import com.archilog.reservationservice.repository.ReservationRepository;
@@ -19,13 +21,16 @@ public class ReservationService {
     private final ReservationRepository reservationRepository;
     private final RoomClient roomClient;
     private final MemberClient memberClient;
+    private final ReservationEventProducer reservationEventProducer;
 
     public ReservationService(ReservationRepository reservationRepository,
                               RoomClient roomClient,
-                              MemberClient memberClient) {
+                              MemberClient memberClient,
+                              ReservationEventProducer reservationEventProducer) {
         this.reservationRepository = reservationRepository;
         this.roomClient = roomClient;
         this.memberClient = memberClient;
+        this.reservationEventProducer = reservationEventProducer;
     }
 
     public List<Reservation> getAllReservations() {
@@ -84,6 +89,13 @@ public class ReservationService {
         // Marquer la salle comme indisponible
         roomClient.updateRoomAvailability(dto.roomId(), false);
 
+        // Publier événement Kafka — suspension du membre si quota atteint
+        long newActiveCount = activeCount + 1;
+        reservationEventProducer.publishReservationCreated(new ReservationEvent(
+                saved.getId(), saved.getMemberId(), saved.getRoomId(),
+                "CONFIRMED", newActiveCount, maxBookings
+        ));
+
         return saved;
     }
 
@@ -105,6 +117,15 @@ public class ReservationService {
             roomClient.updateRoomAvailability(reservation.getRoomId(), true);
         }
 
+        // Publier événement Kafka — désuspension du membre si quota repassé en dessous
+        int maxBookings = memberClient.getMemberMaxBookings(reservation.getMemberId());
+        long activeCount = reservationRepository.countByMemberIdAndStatus(
+                reservation.getMemberId(), ReservationStatus.CONFIRMED);
+        reservationEventProducer.publishReservationStatusChanged(new ReservationEvent(
+                saved.getId(), saved.getMemberId(), saved.getRoomId(),
+                "CANCELLED", activeCount, maxBookings
+        ));
+
         return saved;
     }
 
@@ -125,6 +146,15 @@ public class ReservationService {
         if (remaining.isEmpty()) {
             roomClient.updateRoomAvailability(reservation.getRoomId(), true);
         }
+
+        // Publier événement Kafka — désuspension du membre si quota repassé en dessous
+        int maxBookings = memberClient.getMemberMaxBookings(reservation.getMemberId());
+        long activeCount = reservationRepository.countByMemberIdAndStatus(
+                reservation.getMemberId(), ReservationStatus.CONFIRMED);
+        reservationEventProducer.publishReservationStatusChanged(new ReservationEvent(
+                saved.getId(), saved.getMemberId(), saved.getRoomId(),
+                "COMPLETED", activeCount, maxBookings
+        ));
 
         return saved;
     }

@@ -2,6 +2,7 @@ package com.archilog.memberservice.service;
 
 import com.archilog.memberservice.dto.CreateMemberDTO;
 import com.archilog.memberservice.exception.ResourceNotFoundException;
+import com.archilog.memberservice.kafka.MemberEventProducer;
 import com.archilog.memberservice.model.Member;
 import com.archilog.memberservice.repository.MemberRepository;
 import org.springframework.stereotype.Service;
@@ -12,9 +13,11 @@ import java.util.List;
 public class MemberService {
 
     private final MemberRepository memberRepository;
+    private final MemberEventProducer memberEventProducer;
 
-    public MemberService(MemberRepository memberRepository) {
+    public MemberService(MemberRepository memberRepository, MemberEventProducer memberEventProducer) {
         this.memberRepository = memberRepository;
+        this.memberEventProducer = memberEventProducer;
     }
 
     public List<Member> getAllMembers() {
@@ -45,6 +48,8 @@ public class MemberService {
     public void deleteMember(Long id) {
         Member member = getMemberById(id);
         memberRepository.delete(member);
+        // Publier l'événement Kafka pour supprimer les réservations associées
+        memberEventProducer.publishMemberDeleted(id);
     }
 
     public Member updateSuspension(Long id, boolean suspended) {

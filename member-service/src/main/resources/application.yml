@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: member-service
+  config:
+    import: optional:configserver:http://localhost:8888
   datasource:
     url: jdbc:h2:mem:memberdb
     driver-class-name: org.h2.Driver
@@ -27,9 +29,12 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         spring.json.trusted.packages: "*"
+        spring.json.type.mapping: ReservationEvent:com.archilog.memberservice.event.ReservationEvent
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.type.mapping: MemberDeletedEvent:com.archilog.memberservice.event.MemberDeletedEvent
 
 eureka:
   client:

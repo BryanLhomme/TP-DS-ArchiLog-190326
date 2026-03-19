@@ -2,6 +2,7 @@ package com.archilog.roomservice.service;
 
 import com.archilog.roomservice.dto.CreateRoomDTO;
 import com.archilog.roomservice.exception.ResourceNotFoundException;
+import com.archilog.roomservice.kafka.RoomEventProducer;
 import com.archilog.roomservice.model.Room;
 import com.archilog.roomservice.repository.RoomRepository;
 import org.springframework.stereotype.Service;
@@ -12,9 +13,11 @@ import java.util.List;
 public class RoomService {
 
     private final RoomRepository roomRepository;
+    private final RoomEventProducer roomEventProducer;
 
-    public RoomService(RoomRepository roomRepository) {
+    public RoomService(RoomRepository roomRepository, RoomEventProducer roomEventProducer) {
         this.roomRepository = roomRepository;
+        this.roomEventProducer = roomEventProducer;
     }
 
     public List<Room> getAllRooms() {
@@ -58,6 +61,8 @@ public class RoomService {
     public void deleteRoom(Long id) {
         Room room = getRoomById(id);
         roomRepository.delete(room);
+        // Publier l'événement Kafka pour annuler les réservations associées
+        roomEventProducer.publishRoomDeleted(id);
     }
 
     public Room updateAvailability(Long id, boolean available) {
